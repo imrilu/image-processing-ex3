@@ -7,7 +7,6 @@ from scipy import linalg as linalg
 import matplotlib.pyplot as plt
 
 
-
 def read_image(filename, representation):
     """
     A method for reading an image from a path and loading in as gray or in color
@@ -99,16 +98,20 @@ def subsample(im):
     # # print(final_sample)
     return subsampled
 
-def expand(im):
+def expand(im, filter_vec=None):
     new_expand = np.zeros(shape=(int(im.shape[0]*2), int(im.shape[1]*2)))
     # TODO: replace double-loop with padding
     for i in range(int(im.shape[0])):
         for j in range(int(im.shape[1])):
                 new_expand[2*i][2*j] = im[i][j]
-    avg_kernel = create_gaussian_line(3)
-    new_expand = scipy.signal.convolve2d(new_expand, avg_kernel, mode='same')
+
+    if filter_vec is None:
+        kernel = create_gaussian_line(3)
+    else:
+        kernel = filter_vec
+    new_expand = scipy.signal.convolve2d(new_expand, kernel, mode='same')
     new_expand = np.transpose(new_expand)
-    new_expand = scipy.signal.convolve2d(new_expand, avg_kernel, mode='same')
+    new_expand = scipy.signal.convolve2d(new_expand, kernel, mode='same')
     new_expand = np.transpose(new_expand)
 
     return new_expand
@@ -126,32 +129,91 @@ def create_reduce_arr(im, size):
 
 def build_gaussian_pyramid(im, max_levels, filter_size):
 
-    filter_vec = create_gaussian_line(filter_size)
+    filter_vec = 2 * create_gaussian_line(filter_size)
 
     temp_im = scipy.signal.convolve2d(im, filter_vec, mode='same')
-    temp_im = scipy.signal.convolve2d(im, np.transpose(filter_vec), mode='same')
+    temp_im = scipy.signal.convolve2d(temp_im, np.transpose(filter_vec), mode='same')
 
-    pyr = create_reduce_arr(im, max_levels)
+    pyr = create_reduce_arr(temp_im, max_levels)
 
     return filter_vec, pyr
 
 def build_laplacian_pyramid(im, max_levels, filter_size):
     pyr = []
-    # filter_vec, gaussian_pyr = build_gaussian_pyramid(im, max_levels, filter_size)
-    org_reduce = create_reduce_arr(im, max_levels)
+    filter_vec, org_reduce = build_gaussian_pyramid(im, max_levels, filter_size)
+    # org_reduce = create_reduce_arr(im, max_levels)
     for i in range(len(org_reduce) - 1):
-        temp_expand = expand(org_reduce[i + 1])
+        temp_expand = expand(org_reduce[i + 1], filter_vec)
         org_layer = org_reduce[i]
-        temp = np.subtract(org_layer, temp_expand)
+        temp = org_layer - temp_expand
         pyr.append(temp)
     pyr.append(org_reduce[-1])
-    return pyr
+    return filter_vec, pyr
+
+def laplacian_to_image(lpyr, filter_vec, coeff):
+    filteredVector = 2*filter_vec
+    pyr_updated = np.multiply(lpyr, coeff)
+    cur_layer = lpyr[-1]
+    for i in range(len(pyr_updated) - 2, -1, -1):
+        cur_layer = expand(cur_layer, filteredVector) + pyr_updated[i]
+    return cur_layer
+
+def render_pyramid(pyr, levels):
+    positionLst = []
+    finalLst = []
+    if levels > len(pyr):
+        print("error. number of levels to display is more than max_levels")
+    width = 0
+    for i in range(levels):
+        width += pyr[i].shape[1]
+        positionLst.append((pyr[i].shape[0], pyr[i].shape[1]))
+
+    for i in range(levels):
+        zeros = np.zeros(shape=(pyr[0].shape[0], pyr[i].shape[1]))
+        zeros[:positionLst[i][0], :positionLst[i][1]] = pyr[i]
+        finalLst.append(zeros)
+    res = np.concatenate(finalLst, axis=1)
+
+    return res
 
 
+def display_pyramid(pyr, levels):
+    res = render_pyramid(pyr, levels)
+    plt.imshow(res, cmap='gray')
+    plt.show()
+
+def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mask):
+    mask = mask.astype(double)
+    filter_vec, lap_pyr1 = build_laplacian_pyramid(im1, max_levels, filter_size_im)
+    lap_pyr2 = build_laplacian_pyramid(im2, max_levels, filter_size_im)[1]
+    gauss_pyr = build_gaussian_pyramid(mask, max_levels, filter_size_mask)[1].astype(np.float64)
+    new_lap_pyr = []
+    coeff = [1] * max_levels
+    for i in range(max_levels):
+        cur_lap_layer = np.multiply(gauss_pyr[i], lap_pyr1[i]) + np.multiply(1 - gauss_pyr[i], lap_pyr2[i])
+        new_lap_pyr.append(cur_lap_layer)
+    final_image = laplacian_to_image(new_lap_pyr, filter_vec, coeff)
+    return np.clip(final_image, 0, 1)
+
+def strech_helper(image, hist):
+    """
+    A helper function for stretching the image
+    :param image: The input picture to be stretched
+    :param hist: The histogram of the input image
+    :return: The stretched image
+    """
+    image = (image * 255).astype(int)
+    cdf = np.cumsum(hist)
+    cdf = 255 * cdf / cdf[-1]
+    cdf_m = np.ma.masked_equal(cdf, 0)
+    cdf_m = (cdf_m - cdf_m.min()) * 255 / (cdf_m.max() - cdf_m.min())
+    return (cdf_m[image] / 255).astype(np.float64)
 
 pic = read_image("C:\ex1\gray_orig.png",1)
-pic = build_laplacian_pyramid(pic, 5, 3)[0]
+lplc = build_laplacian_pyramid(pic, 4, 3)
+gauss = build_laplacian_pyramid(pic, 4, 3)
 
+res = render_pyramid(lplc[1], 4)
 
-plt.imshow(pic, cmap='gray')
+plt.imshow(res, cmap='gray')
 plt.show()
