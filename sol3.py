@@ -49,19 +49,16 @@ def create_gaussian_line(size):
 
 def expand(im, filter_vec=None):
     new_expand = np.zeros(shape=(int(im.shape[0]*2), int(im.shape[1]*2)))
-
     new_expand[::2,::2] = im
-
     if filter_vec is None:
         kernel = create_gaussian_line(3)
     else:
         kernel = filter_vec
     new_expand = scipy.signal.convolve2d(new_expand, 2*kernel, mode='same')
-    new_expand = np.transpose(new_expand)
-    new_expand = scipy.signal.convolve2d(new_expand, 2*kernel, mode='same')
-    new_expand = np.transpose(new_expand)
+    new_expand = scipy.signal.convolve2d(new_expand, np.transpose(2*kernel), mode='same')
 
     return new_expand
+
 
 def create_reduce_arr(im, size):
     arr = []
@@ -93,19 +90,20 @@ def build_laplacian_pyramid(im, max_levels, filter_size):
         temp_expand = expand(org_reduce[i + 1], filter_vec)
         org_layer = org_reduce[i]
         temp = org_layer - temp_expand
-        pyr.append(temp)
+        pyr.append(strech_helper(temp))
     # plt.imshow(org_reduce[-1], cmap='gray')
     # plt.show()
-    pyr.append(org_reduce[-1])
+    pyr.append(strech_helper(org_reduce[-1]))
     return pyr, filter_vec
 
-def laplacian_to_image(lpyr, filter_vec, coeff):
 
+def laplacian_to_image(lpyr, filter_vec, coeff):
     pyr_updated = np.multiply(lpyr, coeff)
     cur_layer = lpyr[-1]
     for i in range(len(pyr_updated) - 2, -1, -1):
         cur_layer = expand(cur_layer, filter_vec) + pyr_updated[i]
     return cur_layer
+
 
 def render_pyramid(pyr, levels):
     positionLst = []
@@ -124,6 +122,10 @@ def render_pyramid(pyr, levels):
     res = np.concatenate(finalLst, axis=1)
 
     return res
+
+def strech_helper(im):
+    return (im - np.min(im))/(np.max(im) - np.min(im))
+
 
 def display_pyramid(pyr, levels):
     res = render_pyramid(pyr, levels)
@@ -151,5 +153,5 @@ gauss = build_gaussian_pyramid(pic, 5, 5)
 res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1,1,1])
 new = render_pyramid(lplc[0], 5)
 
-plt.imshow(new, cmap='gray')
+plt.imshow(res, cmap='gray')
 plt.show()

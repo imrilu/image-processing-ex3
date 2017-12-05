@@ -1,0 +1,3 @@
+Q1: What does it mean to multiply each level in a different value? What do we try to control on?
+A1: Multiplaying each layer in a different value help us control the weights of each layer (frequancies of the layer) in the 
+end-result picture. for example if we'd like to give less weights to the highest frequancies, we'd give less weights on the 1st layer.
