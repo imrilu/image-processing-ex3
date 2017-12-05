@@ -5,7 +5,7 @@ from skimage.color import rgb2gray
 from scipy.misc import imread as imread
 from scipy import linalg as linalg
 import matplotlib.pyplot as plt
-
+import os
 
 def read_image(filename, representation):
     """
@@ -29,7 +29,7 @@ def read_image(filename, representation):
 
 def create_gaussian_line(size):
     """
-    A helper method for creating a gaussian kernel with the input size
+    A helper method for creating a gaussian kernel 'line' with the input size
     :param size: The size of the output dimension of the gaussian kernel
     :return: A discrete gaussian kernel
     """
@@ -48,6 +48,12 @@ def create_gaussian_line(size):
 
 
 def expand(im, filter_vec=None):
+    """
+    a helper method for expanding the image by double from it's input size
+    :param im: the input picture to expand
+    :param filter_vec: a custom filter in case we'd like to convolve with different one
+    :return: the expanded picture after convolution
+    """
     new_expand = np.zeros(shape=(int(im.shape[0]*2), int(im.shape[1]*2)))
     new_expand[::2,::2] = im
     if filter_vec is None:
@@ -61,6 +67,12 @@ def expand(im, filter_vec=None):
 
 
 def create_reduce_arr(im, size):
+    """
+    helper method for creating a reduced picture array by subsampling pixels of the org picture
+    :param im: input picture to reduce
+    :param size: number of layers to be created in the output array
+    :return: an array with the reduced pictures
+    """
     arr = []
     arr.append(im)
     temp_im = im
@@ -72,7 +84,13 @@ def create_reduce_arr(im, size):
 
 
 def build_gaussian_pyramid(im, max_levels, filter_size):
-
+    """
+    a method for building a gaussian pyramid
+    :param im: the input image to construct the pyramid from
+    :param max_levels: maximum levels in the pyramid
+    :param filter_size: the size of the gaussian filter we're using
+    :return: an array representing the pyramid
+    """
     filter_vec = create_gaussian_line(filter_size)
 
     temp_im = scipy.signal.convolve2d(im, filter_vec, mode='same')
@@ -83,6 +101,13 @@ def build_gaussian_pyramid(im, max_levels, filter_size):
     return pyr, filter_vec
 
 def build_laplacian_pyramid(im, max_levels, filter_size):
+    """
+    a method for building a laplacian pyramid
+    :param im: the input image to construct the pyramid from
+    :param max_levels: maximum levels in the pyramid
+    :param filter_size: the size of the laplacian filter we're using
+    :return: an array representing the pyramid
+    """
     pyr = []
     org_reduce, filter_vec = build_gaussian_pyramid(im, max_levels, filter_size)
     # org_reduce = create_reduce_arr(im, max_levels)
@@ -98,6 +123,13 @@ def build_laplacian_pyramid(im, max_levels, filter_size):
 
 
 def laplacian_to_image(lpyr, filter_vec, coeff):
+    """
+    a method that constructs the original image from it's laplacian pyramid
+    :param lpyr: the laplacian pyramid of the image we'd like to construct
+    :param filter_vec: the filter vector to be used in the reconstruction
+    :param coeff: the coefficients for each layer of the pyramid
+    :return: the reconstructed image
+    """
     pyr_updated = np.multiply(lpyr, coeff)
     cur_layer = lpyr[-1]
     for i in range(len(pyr_updated) - 2, -1, -1):
@@ -106,6 +138,12 @@ def laplacian_to_image(lpyr, filter_vec, coeff):
 
 
 def render_pyramid(pyr, levels):
+    """
+    render the pyramid and construct a single image representing all the layers horizontally
+    :param pyr: the image's pyramid
+    :param levels: the number of levels of the pyramid
+    :return: an image representing all the pyramid's layers horizontally
+    """
     positionLst = []
     finalLst = []
     if levels > len(pyr):
@@ -127,15 +165,35 @@ def render_pyramid(pyr, levels):
     return res
 
 def strech_helper(im):
+    """
+    helper function for streching and equalizing the image between 0 and 1
+    :param im: input picture to equalize
+    :return: equalized picture between 0 and 1
+    """
     return (im - np.min(im))/(np.max(im) - np.min(im))
 
 
 def display_pyramid(pyr, levels):
+    """
+    displaying the pyramid into the screen using plt
+    :param pyr: the input pyramid to be displayed
+    :param levels: number of levels of the pyramid
+    """
     res = render_pyramid(pyr, levels)
     plt.imshow(res, cmap='gray')
     plt.show()
 
 def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mask):
+    """
+    a method for blending 2 pictures using a binary mask
+    :param im1: the first picture to blend
+    :param im2: the second picture to blend
+    :param mask: the binary mask
+    :param max_levels: number of max levels to be used while constructing the pyramids
+    :param filter_size_im: size of the filter for the images
+    :param filter_size_mask: size of the filter for the mask
+    :return:
+    """
     mask = mask.astype(np.float64)
     lap_pyr1, filter_vec = build_laplacian_pyramid(im1, max_levels, filter_size_im)
     lap_pyr2 = build_laplacian_pyramid(im2, max_levels, filter_size_im)[0]
@@ -151,6 +209,41 @@ def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mas
     final_image = laplacian_to_image(new_lap_pyr, filter_vec, coeff)
     return np.clip(final_image, 0, 1)
 
+def relpath(filename):
+    """
+    helper method for using relative paths to load the pictures
+    :param filename: the relative path to be parsed
+    :return: the real path
+    """
+    return os.path.join(os.path.dirname(__file__), filename)
+
+def blending_example1():
+    """
+    a method for creating a blending example constructing a blend from 2 rgb images
+    :return: the blended picture
+    """
+    pic_desert = read_image(relpath(".\externals\pic_desert.jpg"), 2)
+    pic_pool = read_image(relpath(".\externals\pic_swim.jpg"), 2)
+    mask = np.zeros(shape=(pic_desert.shape[0], pic_desert.shape[1]))
+    mask[329:832:, 395:621:] = 1
+
+    [R1, G1, B1] = np.dsplit(pic_desert, pic_desert.shape[2])
+    [R2, G2, B2] = np.dsplit(pic_pool, pic_pool.shape[2])
+    R1 = np.reshape(R1, (636,958))
+    R2 = np.reshape(R2, (636,958))
+    G1 = np.reshape(G1, (636,958))
+    G2 = np.reshape(G2, (636,958))
+    B1 = np.reshape(B1, (636,958))
+    B2 = np.reshape(B2, (636,958))
+
+    blend1 = pyramid_blending(R1, R2, mask, 3, 3, 3)
+    blend2 = pyramid_blending(G1, G2, mask, 3, 3, 3)
+    blend3 = pyramid_blending(B1, G2, mask, 3, 3, 3)
+
+    new_pic = np.concatenate((blend1, blend2, blend3), axis=2)
+
+    plt.imshow(new_pic, cmap='gray')
+    plt.show()
 
 pic = read_image("C:\ex1\gray_orig.png",1)
 pic2 = read_image("C:\ex1\/rgb_3_quants.png",1)
@@ -159,11 +252,12 @@ gauss = build_gaussian_pyramid(pic, 3, 3)
 
 # res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1])
 # new = render_pyramid(lplc[0], 5)
-mask = np.ones(shape=(pic.shape[0], pic.shape[1]))
-for i in range(int(mask.shape[0]/2)):
-    for j in range(int(mask.shape[1]/2)):
-        mask[i][j] = 0
-blend = pyramid_blending(pic, pic2, mask, 3, 3, 3)
+# mask = np.ones(shape=(pic.shape[0], pic.shape[1]))
+# for i in range(int(mask.shape[0]/2)):
+#     for j in range(int(mask.shape[1]/2)):
+#         mask[i][j] = 0
+# blend = pyramid_blending(pic, pic2, mask, 3, 3, 3)
 
-plt.imshow(blend, cmap='gray')
-plt.show()
+# plt.imshow(blend, cmap='gray')
+# plt.show()
+blending_example1()
