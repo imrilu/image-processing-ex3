@@ -26,47 +26,6 @@ def read_image(filename, representation):
             im = im / 255
     return im
 
-def blur_spatial(im, kernel_size):
-    """
-    A method for calculating a blurred version of input picture
-    :param im: The image to blur
-    :param kernel_size: The size of the gaussian matrix, indicating the intensity of the blur
-    :return: The blurred picture
-    """
-    # assuming kernel_size is odd
-    gaussian_kernel = create_gaussian_kernel(kernel_size)
-    conv_im = scipy.signal.convolve2d(im, gaussian_kernel, mode='same')
-    return conv_im
-
-def create_gaussian_kernel(size):
-    """
-    A helper method for creating a gaussian kernel with the input size
-    :param size: The size of the output dimension of the gaussian kernel
-    :return: A discrete gaussian kernel
-    """
-    bin_arr = np.array([1, 1])
-    org_arr = np.array([1, 1])
-    sum = 0
-    gaussian_matrix = np.zeros(shape=(size, size))
-    # TODO: what if size==1 - should return kernel with [1] ?
-    if (size == 1):
-        # special case, returning a [1] matrix
-        return np.array([1])
-    for i in range(size-2):
-        # iterating to create the initial row of the kernel
-        bin_arr = scipy.signal.convolve(bin_arr, org_arr)
-    # calculating values on each entry in matrix
-    for x in range(size):
-        for y in range(size):
-            gaussian_matrix[x][y] = bin_arr[x] * bin_arr[y]
-            sum += gaussian_matrix[x][y]
-    # TODO: search for element-wise multiplication for vector*vector=matrix
-    # TODO: maybe create a matrix from repeated row vector
-    # normalizing matrix to 1
-    for x in range(size):
-        for y in range(size):
-            gaussian_matrix[x][y] /= sum
-    return gaussian_matrix
 
 def create_gaussian_line(size):
     """
@@ -87,31 +46,19 @@ def create_gaussian_line(size):
     bin_arr = np.reshape(bin_arr, (1,size))
     return bin_arr
 
-def subsample(im):
-    subsampled = im[0::2]
-    subsampled = np.transpose(subsampled)
-    subsampled = subsampled[0::2]
-    subsampled = np.transpose(subsampled)
-    # final_sample = np.zeros(shape=(int(im.shape[0]/2), int(im.shape[1]/2)))
-    # for i in range(int(im.shape[0]/2)):
-    #     final_sample[i] = subsampled[i][0::2]
-    # # print(final_sample)
-    return subsampled
 
 def expand(im, filter_vec=None):
     new_expand = np.zeros(shape=(int(im.shape[0]*2), int(im.shape[1]*2)))
-    # TODO: replace double-loop with padding
-    for i in range(int(im.shape[0])):
-        for j in range(int(im.shape[1])):
-                new_expand[2*i][2*j] = im[i][j]
+
+    new_expand[::2,::2] = im
 
     if filter_vec is None:
         kernel = create_gaussian_line(3)
     else:
         kernel = filter_vec
-    new_expand = scipy.signal.convolve2d(new_expand, kernel, mode='same')
+    new_expand = scipy.signal.convolve2d(new_expand, 2*kernel, mode='same')
     new_expand = np.transpose(new_expand)
-    new_expand = scipy.signal.convolve2d(new_expand, kernel, mode='same')
+    new_expand = scipy.signal.convolve2d(new_expand, 2*kernel, mode='same')
     new_expand = np.transpose(new_expand)
 
     return new_expand
@@ -120,8 +67,8 @@ def create_reduce_arr(im, size):
     arr = []
     arr.append(im)
     temp_im = im
-    for i in range(size):
-        subsampled = subsample(temp_im)
+    for i in range(size - 1):
+        subsampled = temp_im[::2,::2]
         arr.append(subsampled)
         temp_im = subsampled
     return arr
@@ -129,33 +76,35 @@ def create_reduce_arr(im, size):
 
 def build_gaussian_pyramid(im, max_levels, filter_size):
 
-    filter_vec = 2 * create_gaussian_line(filter_size)
+    filter_vec = create_gaussian_line(filter_size)
 
     temp_im = scipy.signal.convolve2d(im, filter_vec, mode='same')
     temp_im = scipy.signal.convolve2d(temp_im, np.transpose(filter_vec), mode='same')
 
     pyr = create_reduce_arr(temp_im, max_levels)
-
-    return filter_vec, pyr
+    pyr[0] = im
+    return pyr, filter_vec
 
 def build_laplacian_pyramid(im, max_levels, filter_size):
     pyr = []
-    filter_vec, org_reduce = build_gaussian_pyramid(im, max_levels, filter_size)
+    org_reduce, filter_vec = build_gaussian_pyramid(im, max_levels, filter_size)
     # org_reduce = create_reduce_arr(im, max_levels)
-    for i in range(len(org_reduce) - 1):
+    for i in range(max_levels - 1):
         temp_expand = expand(org_reduce[i + 1], filter_vec)
         org_layer = org_reduce[i]
         temp = org_layer - temp_expand
         pyr.append(temp)
+    # plt.imshow(org_reduce[-1], cmap='gray')
+    # plt.show()
     pyr.append(org_reduce[-1])
-    return filter_vec, pyr
+    return pyr, filter_vec
 
 def laplacian_to_image(lpyr, filter_vec, coeff):
-    filteredVector = 2*filter_vec
+
     pyr_updated = np.multiply(lpyr, coeff)
     cur_layer = lpyr[-1]
     for i in range(len(pyr_updated) - 2, -1, -1):
-        cur_layer = expand(cur_layer, filteredVector) + pyr_updated[i]
+        cur_layer = expand(cur_layer, filter_vec) + pyr_updated[i]
     return cur_layer
 
 def render_pyramid(pyr, levels):
@@ -176,17 +125,16 @@ def render_pyramid(pyr, levels):
 
     return res
 
-
 def display_pyramid(pyr, levels):
     res = render_pyramid(pyr, levels)
     plt.imshow(res, cmap='gray')
     plt.show()
 
 def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mask):
-    mask = mask.astype(double)
-    filter_vec, lap_pyr1 = build_laplacian_pyramid(im1, max_levels, filter_size_im)
-    lap_pyr2 = build_laplacian_pyramid(im2, max_levels, filter_size_im)[1]
-    gauss_pyr = build_gaussian_pyramid(mask, max_levels, filter_size_mask)[1].astype(np.float64)
+    mask = mask.astype(np.float64)
+    lap_pyr1, filter_vec = build_laplacian_pyramid(im1, max_levels, filter_size_im)
+    lap_pyr2 = build_laplacian_pyramid(im2, max_levels, filter_size_im)[0]
+    gauss_pyr = build_gaussian_pyramid(mask, max_levels, filter_size_mask)[0].astype(np.float64)
     new_lap_pyr = []
     coeff = [1] * max_levels
     for i in range(max_levels):
@@ -195,25 +143,13 @@ def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mas
     final_image = laplacian_to_image(new_lap_pyr, filter_vec, coeff)
     return np.clip(final_image, 0, 1)
 
-def strech_helper(image, hist):
-    """
-    A helper function for stretching the image
-    :param image: The input picture to be stretched
-    :param hist: The histogram of the input image
-    :return: The stretched image
-    """
-    image = (image * 255).astype(int)
-    cdf = np.cumsum(hist)
-    cdf = 255 * cdf / cdf[-1]
-    cdf_m = np.ma.masked_equal(cdf, 0)
-    cdf_m = (cdf_m - cdf_m.min()) * 255 / (cdf_m.max() - cdf_m.min())
-    return (cdf_m[image] / 255).astype(np.float64)
 
 pic = read_image("C:\ex1\gray_orig.png",1)
-lplc = build_laplacian_pyramid(pic, 4, 3)
-gauss = build_laplacian_pyramid(pic, 4, 3)
+lplc = build_laplacian_pyramid(pic, 5, 5)
+gauss = build_gaussian_pyramid(pic, 5, 5)
 
-res = render_pyramid(lplc[1], 4)
+res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1,1,1])
+new = render_pyramid(lplc[0], 5)
 
-plt.imshow(res, cmap='gray')
+plt.imshow(new, cmap='gray')
 plt.show()
