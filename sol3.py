@@ -90,10 +90,10 @@ def build_laplacian_pyramid(im, max_levels, filter_size):
         temp_expand = expand(org_reduce[i + 1], filter_vec)
         org_layer = org_reduce[i]
         temp = org_layer - temp_expand
-        pyr.append(strech_helper(temp))
+        pyr.append(temp)
     # plt.imshow(org_reduce[-1], cmap='gray')
     # plt.show()
-    pyr.append(strech_helper(org_reduce[-1]))
+    pyr.append(org_reduce[-1])
     return pyr, filter_vec
 
 
@@ -111,7 +111,10 @@ def render_pyramid(pyr, levels):
     if levels > len(pyr):
         print("error. number of levels to display is more than max_levels")
     width = 0
+
     for i in range(levels):
+        # streching each layer
+        pyr[i] = strech_helper(pyr[i])
         width += pyr[i].shape[1]
         positionLst.append((pyr[i].shape[0], pyr[i].shape[1]))
 
@@ -136,7 +139,10 @@ def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mas
     mask = mask.astype(np.float64)
     lap_pyr1, filter_vec = build_laplacian_pyramid(im1, max_levels, filter_size_im)
     lap_pyr2 = build_laplacian_pyramid(im2, max_levels, filter_size_im)[0]
-    gauss_pyr = build_gaussian_pyramid(mask, max_levels, filter_size_mask)[0].astype(np.float64)
+    gauss_pyr = build_gaussian_pyramid(mask, max_levels, filter_size_mask)[0]
+    # TODO: find more elegant way instead of loop
+    for i in range(len(gauss_pyr)):
+        gauss_pyr[i] = np.array(gauss_pyr[i], dtype=np.float64)
     new_lap_pyr = []
     coeff = [1] * max_levels
     for i in range(max_levels):
@@ -147,11 +153,17 @@ def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mas
 
 
 pic = read_image("C:\ex1\gray_orig.png",1)
-lplc = build_laplacian_pyramid(pic, 5, 5)
-gauss = build_gaussian_pyramid(pic, 5, 5)
+pic2 = read_image("C:\ex1\/rgb_3_quants.png",1)
+lplc = build_laplacian_pyramid(pic, 3, 3)
+gauss = build_gaussian_pyramid(pic, 3, 3)
 
-res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1,1,1])
-new = render_pyramid(lplc[0], 5)
+# res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1])
+# new = render_pyramid(lplc[0], 5)
+mask = np.ones(shape=(pic.shape[0], pic.shape[1]))
+for i in range(int(mask.shape[0]/2)):
+    for j in range(int(mask.shape[1]/2)):
+        mask[i][j] = 0
+blend = pyramid_blending(pic, pic2, mask, 3, 3, 3)
 
-plt.imshow(res, cmap='gray')
+plt.imshow(blend, cmap='gray')
 plt.show()
