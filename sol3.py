@@ -46,7 +46,7 @@ def create_gaussian_line(size):
     return bin_arr
 
 
-def expand(im, filter_vec=None):
+def expand(im, filter_vec):
     """
     a helper method for expanding the image by double from it's input size
     :param im: the input picture to expand
@@ -55,12 +55,8 @@ def expand(im, filter_vec=None):
     """
     new_expand = np.zeros(shape=(int(im.shape[0]*2), int(im.shape[1]*2)))
     new_expand[::2,::2] = im
-    if filter_vec is None:
-        kernel = create_gaussian_line(3)
-    else:
-        kernel = filter_vec
-    new_expand = scipy.signal.convolve2d(new_expand, 2*kernel, mode='same')
-    new_expand = scipy.signal.convolve2d(new_expand, np.transpose(2*kernel), mode='same')
+    new_expand = scipy.signal.convolve2d(new_expand, 2*filter_vec, mode='same')
+    new_expand = scipy.signal.convolve2d(new_expand, np.transpose(2*filter_vec), mode='same')
 
     return new_expand
 
@@ -77,7 +73,6 @@ def build_gaussian_pyramid(im, max_levels, filter_size):
     # creating duplicate for confy use
     temp_im = im
     pyr = [im]
-
 
     for i in range(max_levels - 1):
         # blurring the cur layer
@@ -149,7 +144,6 @@ def render_pyramid(pyr, levels):
         zeros[:positionLst[i][0], :positionLst[i][1]] = pyr[i]
         finalLst.append(zeros)
     res = np.concatenate(finalLst, axis=1)
-
     return res
 
 def strech_helper(im):
@@ -170,6 +164,7 @@ def display_pyramid(pyr, levels):
     res = render_pyramid(pyr, levels)
     plt.imshow(res, cmap='gray')
     plt.show()
+
 
 def pyramid_blending(im1, im2, mask, max_levels, filter_size_im, filter_size_mask):
     """
@@ -210,9 +205,9 @@ def blending_example1():
     a method for creating a blending example constructing a blend from 2 rgb images
     :return: the blended picture
     """
-    pic_desert = read_image(relpath(".\externals\pic_desert.jpg"), 2)
-    pic_pool = read_image(relpath(".\externals\pic_swim.jpg"), 2)
-    mask = read_image(relpath(".\externals\mask_desert.jpg"), 1)
+    pic_desert = read_image(relpath("./externals/pic_desert.jpg"), 2)
+    pic_pool = read_image(relpath("./externals/pic_swim.jpg"), 2)
+    mask = read_image(relpath("./externals/mask_desert.jpg"), 1)
     # making the mask binary (normalizing 2 original values)
     mask = strech_helper(mask)
     [R1, G1, B1] = np.dsplit(pic_desert, pic_desert.shape[2])
@@ -233,8 +228,16 @@ def blending_example1():
     blend3 = np.reshape(blend3, (blend3.shape[0], blend3.shape[1], 1))
 
     new_pic = np.concatenate((blend1, blend2, blend3), axis=2)
-
-    plt.imshow(new_pic, cmap='gray')
+    # plotting the images
+    fig = plt.figure()
+    ax1 = fig.add_subplot(221)
+    ax2 = fig.add_subplot(222)
+    ax3 = fig.add_subplot(223)
+    ax4 = fig.add_subplot(224)
+    ax1.imshow(pic_desert)
+    ax2.imshow(pic_pool)
+    ax3.imshow(mask, cmap='gray')
+    ax4.imshow(new_pic)
     plt.show()
 
     return pic_desert, pic_pool, mask, new_pic
@@ -244,9 +247,9 @@ def blending_example2():
     a method for creating a blending example constructing a blend from 2 rgb images
     :return: the blended picture
     """
-    pic_earth = read_image(relpath(".\externals\pic_earth.jpg"), 2)
-    pic_asteroid = read_image(relpath(".\externals\pic_asteroid.jpg"), 2)
-    mask = read_image(relpath(".\externals\mask_asteroid.jpg"), 1)
+    pic_earth = read_image(relpath("./externals/pic_earth.jpg"), 2)
+    pic_asteroid = read_image(relpath("./externals/pic_asteroid.jpg"), 2)
+    mask = read_image(relpath("./externals/mask_asteroid.jpg"), 1)
     # making the mask binary (normalizing 2 original values)
     mask = strech_helper(mask)
     [R1, G1, B1] = np.dsplit(pic_earth, pic_earth.shape[2])
@@ -267,30 +270,25 @@ def blending_example2():
     blend3 = np.reshape(blend3, (blend3.shape[0], blend3.shape[1], 1))
 
     new_pic = np.concatenate((blend1, blend2, blend3), axis=2)
-
-    plt.imshow(new_pic, cmap='gray')
+    # plotting the images
+    fig = plt.figure()
+    ax1 = fig.add_subplot(221)
+    ax2 = fig.add_subplot(222)
+    ax3 = fig.add_subplot(223)
+    ax4 = fig.add_subplot(224)
+    ax1.imshow(pic_earth)
+    ax2.imshow(pic_asteroid)
+    ax3.imshow(mask, cmap='gray')
+    ax4.imshow(new_pic)
     plt.show()
 
     return pic_earth, pic_asteroid, mask, new_pic
 
 
-# pic = read_image("C:\ex1\gray_orig.png",1)
-# pic2 = read_image("C:\ex1\/rgb_3_quants.png",1)
-# lplc = build_laplacian_pyramid(pic, 5, 3)
-# gauss = build_gaussian_pyramid(pic, 5, 3)
-#
-# res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1] * 5)
-# new = render_pyramid(lplc[0], 5)
-# mask = np.ones(shape=(pic.shape[0], pic.shape[1]))
-# for i in range(int(mask.shape[0]/2)):
-#     for j in range(int(mask.shape[1]/2)):
-#         mask[i][j] = 0
-# blend = pyramid_blending(pic, pic2, mask, 3, 3, 3)
-
-# for i in range(len(gauss[0])):
-#     plt.imshow(gauss[0][i], cmap='gray')
-#     plt.figure()
-
-# plt.imshow(new, cmap='gray')
+# im = read_image(".\externals\pic_earth.jpg", 1)
+# # gauss = build_gaussian_pyramid(im, 5, 7)
+# laplc = build_laplacian_pyramid(im, 5, 5)
+# # res = render_pyramid(laplc[0], 5)
+# render = laplacian_to_image(laplc[0], laplc[1], [1] * 5)
+# plt.imshow(im, cmap='gray')
 # plt.show()
-blending_example2()
