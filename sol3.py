@@ -35,7 +35,6 @@ def create_gaussian_line(size):
     """
     bin_arr = np.array([1, 1])
     org_arr = np.array([1, 1])
-    # TODO: what if size==1 - should return kernel with [1] ?
     if (size == 1):
         # special case, returning a [1] matrix
         return np.array([1])
@@ -66,23 +65,6 @@ def expand(im, filter_vec=None):
     return new_expand
 
 
-def create_reduce_arr(im, size):
-    """
-    helper method for creating a reduced picture array by subsampling pixels of the org picture
-    :param im: input picture to reduce
-    :param size: number of layers to be created in the output array
-    :return: an array with the reduced pictures
-    """
-    arr = []
-    arr.append(im)
-    temp_im = im
-    for i in range(size - 1):
-        subsampled = temp_im[::2,::2]
-        arr.append(subsampled)
-        temp_im = subsampled
-    return arr
-
-
 def build_gaussian_pyramid(im, max_levels, filter_size):
     """
     a method for building a gaussian pyramid
@@ -92,12 +74,19 @@ def build_gaussian_pyramid(im, max_levels, filter_size):
     :return: an array representing the pyramid
     """
     filter_vec = create_gaussian_line(filter_size)
+    # creating duplicate for confy use
+    temp_im = im
+    pyr = [im]
 
-    temp_im = scipy.signal.convolve2d(im, filter_vec, mode='same')
-    temp_im = scipy.signal.convolve2d(temp_im, np.transpose(filter_vec), mode='same')
 
-    pyr = create_reduce_arr(temp_im, max_levels)
-    pyr[0] = im
+    for i in range(max_levels - 1):
+        # blurring the cur layer
+        temp_im = scipy.signal.convolve2d(temp_im, filter_vec, mode='same')
+        temp_im = scipy.signal.convolve2d(temp_im, np.transpose(filter_vec), mode='same')
+        # sampling only every 2nd row and column
+        temp_im = temp_im[::2, ::2]
+        pyr.append(temp_im)
+
     return pyr, filter_vec
 
 def build_laplacian_pyramid(im, max_levels, filter_size):
@@ -110,7 +99,6 @@ def build_laplacian_pyramid(im, max_levels, filter_size):
     """
     pyr = []
     org_reduce, filter_vec = build_gaussian_pyramid(im, max_levels, filter_size)
-    # org_reduce = create_reduce_arr(im, max_levels)
     for i in range(max_levels - 1):
         temp_expand = expand(org_reduce[i + 1], filter_vec)
         org_layer = org_reduce[i]
@@ -224,33 +212,74 @@ def blending_example1():
     """
     pic_desert = read_image(relpath(".\externals\pic_desert.jpg"), 2)
     pic_pool = read_image(relpath(".\externals\pic_swim.jpg"), 2)
-    mask = np.zeros(shape=(pic_desert.shape[0], pic_desert.shape[1]))
-    mask[329:832:, 395:621:] = 1
-
+    mask = read_image(relpath(".\externals\mask_desert.jpg"), 1)
+    # making the mask binary (normalizing 2 original values)
+    mask = strech_helper(mask)
     [R1, G1, B1] = np.dsplit(pic_desert, pic_desert.shape[2])
     [R2, G2, B2] = np.dsplit(pic_pool, pic_pool.shape[2])
-    R1 = np.reshape(R1, (636,958))
-    R2 = np.reshape(R2, (636,958))
-    G1 = np.reshape(G1, (636,958))
-    G2 = np.reshape(G2, (636,958))
-    B1 = np.reshape(B1, (636,958))
-    B2 = np.reshape(B2, (636,958))
+    R1 = np.reshape(R1, (512,1024))
+    R2 = np.reshape(R2, (512,1024))
+    G1 = np.reshape(G1, (512,1024))
+    G2 = np.reshape(G2, (512,1024))
+    B1 = np.reshape(B1, (512,1024))
+    B2 = np.reshape(B2, (512,1024))
 
-    blend1 = pyramid_blending(R1, R2, mask, 3, 3, 3)
-    blend2 = pyramid_blending(G1, G2, mask, 3, 3, 3)
-    blend3 = pyramid_blending(B1, G2, mask, 3, 3, 3)
+    blend1 = pyramid_blending(R2, R1, mask, 3, 3, 3)
+    blend2 = pyramid_blending(G2, G1, mask, 3, 3, 3)
+    blend3 = pyramid_blending(B2, B1, mask, 3, 3, 3)
+
+    blend1 = np.reshape(blend1, (blend1.shape[0], blend1.shape[1], 1))
+    blend2 = np.reshape(blend2, (blend2.shape[0], blend3.shape[1], 1))
+    blend3 = np.reshape(blend3, (blend3.shape[0], blend3.shape[1], 1))
 
     new_pic = np.concatenate((blend1, blend2, blend3), axis=2)
 
     plt.imshow(new_pic, cmap='gray')
     plt.show()
 
-pic = read_image("C:\ex1\gray_orig.png",1)
-pic2 = read_image("C:\ex1\/rgb_3_quants.png",1)
-lplc = build_laplacian_pyramid(pic, 3, 3)
-gauss = build_gaussian_pyramid(pic, 3, 3)
+    return pic_desert, pic_pool, mask, new_pic
 
-# res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1,1,1])
+def blending_example2():
+    """
+    a method for creating a blending example constructing a blend from 2 rgb images
+    :return: the blended picture
+    """
+    pic_earth = read_image(relpath(".\externals\pic_earth.jpg"), 2)
+    pic_asteroid = read_image(relpath(".\externals\pic_asteroid.jpg"), 2)
+    mask = read_image(relpath(".\externals\mask_asteroid.jpg"), 1)
+    # making the mask binary (normalizing 2 original values)
+    mask = strech_helper(mask)
+    [R1, G1, B1] = np.dsplit(pic_earth, pic_earth.shape[2])
+    [R2, G2, B2] = np.dsplit(pic_asteroid, pic_asteroid.shape[2])
+    R1 = np.reshape(R1, (1024,1024))
+    R2 = np.reshape(R2, (1024,1024))
+    G1 = np.reshape(G1, (1024,1024))
+    G2 = np.reshape(G2, (1024,1024))
+    B1 = np.reshape(B1, (1024,1024))
+    B2 = np.reshape(B2, (1024,1024))
+
+    blend1 = pyramid_blending(R2, R1, mask, 3, 3, 3)
+    blend2 = pyramid_blending(G2, G1, mask, 3, 3, 3)
+    blend3 = pyramid_blending(B2, B1, mask, 3, 3, 3)
+
+    blend1 = np.reshape(blend1, (blend1.shape[0], blend1.shape[1], 1))
+    blend2 = np.reshape(blend2, (blend2.shape[0], blend3.shape[1], 1))
+    blend3 = np.reshape(blend3, (blend3.shape[0], blend3.shape[1], 1))
+
+    new_pic = np.concatenate((blend1, blend2, blend3), axis=2)
+
+    plt.imshow(new_pic, cmap='gray')
+    plt.show()
+
+    return pic_earth, pic_asteroid, mask, new_pic
+
+
+# pic = read_image("C:\ex1\gray_orig.png",1)
+# pic2 = read_image("C:\ex1\/rgb_3_quants.png",1)
+# lplc = build_laplacian_pyramid(pic, 5, 3)
+# gauss = build_gaussian_pyramid(pic, 5, 3)
+#
+# res = laplacian_to_image(lplc[0], create_gaussian_line(3), [1] * 5)
 # new = render_pyramid(lplc[0], 5)
 # mask = np.ones(shape=(pic.shape[0], pic.shape[1]))
 # for i in range(int(mask.shape[0]/2)):
@@ -258,6 +287,10 @@ gauss = build_gaussian_pyramid(pic, 3, 3)
 #         mask[i][j] = 0
 # blend = pyramid_blending(pic, pic2, mask, 3, 3, 3)
 
-# plt.imshow(blend, cmap='gray')
+# for i in range(len(gauss[0])):
+#     plt.imshow(gauss[0][i], cmap='gray')
+#     plt.figure()
+
+# plt.imshow(new, cmap='gray')
 # plt.show()
-blending_example1()
+blending_example2()
