@@ -1,4 +1,6 @@
 Q3: What happens (and why this happens) to the result blending from section 4 image when:
 Blending is performed with a varying number of pyramid levels (max_levels = 1,2,3,4,5,...).
 
-A3: 
+A3: When we're blending the 2 images with more levels in the pyramid, the blending will happen in
+each level of the pyramid, resulting the a more 'smooth' edges of the mask. On the other hand, if the pyramid
+has less layers in it, the blending will be more rigid and the edges of the mask will be more visible.
